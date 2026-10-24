@@ -137,6 +137,10 @@ func runSelfTest() -> Bool {
         expect(abs(box.minY - 6) < 0.5 && abs(box.midX - 150) < 0.5, "countdown should fill to the bottom, centered across, in \(name): \(box)")
         if let digits = row.countdown.textRect() {
             expect(abs(digits.digitsMidY - box.height / 2) < 0.5, "digits not centered in their area in \(name)")
+            let font = NSFont.monospacedDigitSystemFont(ofSize: digits.fontSize, weight: .medium)
+            let width = ("12:34" as NSString).size(withAttributes: [.font: font]).width
+            let fill = max(font.capHeight / (box.height * 0.9), width / (box.width * 0.92))
+            expect(abs(fill - 0.8) < 0.01, "digits should be drawn at 80% of the size that fits in \(name), got \(fill)")
         } else {
             expect(false, "countdown has nothing to draw in \(name)")
         }
