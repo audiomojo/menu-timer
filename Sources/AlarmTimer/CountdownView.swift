@@ -6,18 +6,29 @@ final class CountdownView: NSView {
     var color = NSColor.labelColor { didSet { if color != oldValue { needsDisplay = true } } }
 
     override func draw(_ dirtyRect: NSRect) {
-        let reference: CGFloat = 100
-        let font = NSFont.monospacedDigitSystemFont(ofSize: reference, weight: .medium)
-        let measured = (text as NSString).size(withAttributes: [.font: font])
-        guard measured.width > 0, measured.height > 0 else { return }
+        guard let rect = textRect() else { return }
+        let attributes: [NSAttributedString.Key: Any] = [.font: font(ofSize: rect.fontSize), .foregroundColor: color]
+        (text as NSString).draw(at: rect.origin, withAttributes: attributes)
+    }
 
-        let scale = min(bounds.width * 0.92 / measured.width, bounds.height * 0.9 / measured.height)
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: reference * scale, weight: .medium),
-            .foregroundColor: color,
-        ]
-        let size = (text as NSString).size(withAttributes: attributes)
-        let origin = NSPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2)
-        (text as NSString).draw(at: origin, withAttributes: attributes)
+    /// Where `draw(at:)` should put the text, and how big, so the digits fill the view and sit on its center.
+    /// Centers on the digits' height (cap height) rather than the line box, which has room for descenders.
+    func textRect() -> (origin: NSPoint, fontSize: CGFloat, digitsMidY: CGFloat)? {
+        let reference: CGFloat = 100
+        let measured = (text as NSString).size(withAttributes: [.font: font(ofSize: reference)])
+        let referenceCap = font(ofSize: reference).capHeight
+        guard measured.width > 0, referenceCap > 0, bounds.height > 0 else { return nil }
+
+        let scale = min(bounds.width * 0.92 / measured.width, bounds.height * 0.9 / referenceCap)
+        let font = font(ofSize: reference * scale)
+        let width = (text as NSString).size(withAttributes: [.font: font]).width
+        let baseline = bounds.midY - font.capHeight / 2
+        // draw(at:) places the bottom of the line box, which sits one descender below the baseline.
+        let origin = NSPoint(x: bounds.midX - width / 2, y: baseline + font.descender)
+        return (origin, font.pointSize, baseline + font.capHeight / 2)
+    }
+
+    private func font(ofSize size: CGFloat) -> NSFont {
+        .monospacedDigitSystemFont(ofSize: size, weight: .medium)
     }
 }

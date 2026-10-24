@@ -121,6 +121,26 @@ func runSelfTest() -> Bool {
     expect(AlarmSound.current(in: defaults) == .chime, "unknown saved sound should fall back to Chime")
     defaults.removePersistentDomain(forName: suite)
 
+    // The countdown is centered on the row and stays clear of the caption and label.
+    for height: CGFloat in [120, 160, 200] {
+        let row = TimerRowView(showsStop: true)
+        row.caption.stringValue = "Timer · ends 9:00 PM"
+        row.label.stringValue = "Flip Pancakes"
+        row.countdown.text = "12:34"
+        row.frame = NSRect(x: 0, y: 0, width: 300, height: height)
+        row.layoutSubtreeIfNeeded()
+        let box = row.countdown.frame
+        expect(abs(box.midY - height / 2) < 0.5 && abs(box.midX - 150) < 0.5,
+               "countdown area off center in \(height)pt row: \(box)")
+        expect(box.maxY <= row.label.frame.minY, "countdown overlaps label in \(height)pt row")
+        expect(box.height >= 30, "countdown area too small in \(height)pt row: \(box.height)")
+        if let digits = row.countdown.textRect() {
+            expect(abs(digits.digitsMidY - box.height / 2) < 0.5, "digits not vertically centered: \(digits.digitsMidY) vs \(box.height / 2)")
+        } else {
+            expect(false, "countdown has nothing to draw")
+        }
+    }
+
     print(failures == 0 ? "All self-tests passed" : "\(failures) self-test failure(s)")
     return failures == 0
 }

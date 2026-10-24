@@ -1,3 +1,4 @@
 .build/
 AlarmTimer.app/
 .DS_Store
+install/

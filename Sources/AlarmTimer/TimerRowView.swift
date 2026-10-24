@@ -40,6 +40,8 @@ final class TimerRowView: NSView {
         }
         // Equal side insets keep the caption centered whether or not the stop button is shown.
         let sideInset: CGFloat = 28
+        let fill = countdown.heightAnchor.constraint(equalTo: heightAnchor)
+        fill.priority = .defaultLow
         NSLayoutConstraint.activate([
             background.topAnchor.constraint(equalTo: topAnchor),
             background.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -54,12 +56,15 @@ final class TimerRowView: NSView {
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: sideInset),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -sideInset),
 
-            countdown.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 2),
-            countdown.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            // Centered on the whole row: as tall as it can be while staying clear of the label above
+            // and keeping the same gap below.
+            countdown.centerYAnchor.constraint(equalTo: centerYAnchor),
+            countdown.topAnchor.constraint(greaterThanOrEqualTo: label.bottomAnchor, constant: 2),
+            fill,
             countdown.leadingAnchor.constraint(equalTo: leadingAnchor),
             countdown.trailingAnchor.constraint(equalTo: trailingAnchor),
 
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 74),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
         ])
 
         if showsStop {
