@@ -27,6 +27,18 @@ final class TimerRowView: NSView {
         }
     }
 
+    /// Set from the Tile Size setting.
+    var tileHeight: CGFloat {
+        get { heightConstraint.constant }
+        set { heightConstraint.constant = newValue }
+    }
+    private lazy var heightConstraint: NSLayoutConstraint = {
+        let constraint = heightAnchor.constraint(equalToConstant: TileSize.medium.height)
+        // Just below required, so tiles can squeeze when there are too many to fit on screen.
+        constraint.priority = .init(999)
+        return constraint
+    }()
+
     /// Space between the text above and the countdown.
     static let countdownGap: CGFloat = 8
     static let countdownBottomInset: CGFloat = 6
@@ -58,7 +70,7 @@ final class TimerRowView: NSView {
             countdown.leadingAnchor.constraint(equalTo: leadingAnchor),
             countdown.trailingAnchor.constraint(equalTo: trailingAnchor),
 
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 84),
+            heightConstraint,
         ] + [caption, label].flatMap { line in [
             line.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.sideInset),
             line.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.sideInset),

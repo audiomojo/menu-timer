@@ -15,12 +15,19 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         didSet { allRows.forEach { $0.isDropTarget = isDropTarget } }
     }
     private var allRows: [TimerRowView] { [idleRow] + rows.values }
+
+    var tileSize: TileSize {
+        didSet {
+            allRows.forEach { $0.tileHeight = tileSize.height }
+            fitHeight()
+        }
+    }
     private let field = NSTextField()
     private let startButton = NSButton(title: "Start", target: nil, action: nil)
 
     private let rowSpacing: CGFloat = 6
     private let frameDefaultsKey = "panelFrame"
-    /// True while we position the panel ourselves, so only user moves/resizes get saved.
+    /// True while we position the panel ourselves, so only user moves and resizes get saved.
     private var isPlacing = false
 
     private let timeFormatter: DateFormatter = {
@@ -35,8 +42,9 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         return formatter
     }()
 
-    init(model: TimerModel) {
+    init(model: TimerModel, tileSize: TileSize = .current()) {
         self.model = model
+        self.tileSize = tileSize
         panel = ClickReportingPanel(contentRect: NSRect(x: 0, y: 0, width: 320, height: 220),
                                     styleMask: [.titled, .closable, .resizable],
                                     backing: .buffered, defer: false)
@@ -64,10 +72,10 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.contentMinSize = NSSize(width: 220, height: 120)
     }
 
     private func configureIdleRow() {
+        idleRow.tileHeight = tileSize.height
         idleRow.caption.stringValue = "Enter a Duration or Time"
         idleRow.countdown.text = formatCountdown(0)
         idleRow.countdown.color = .tertiaryLabelColor
@@ -76,9 +84,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
     private func makeContent() -> NSView {
         rowsStack.orientation = .vertical
         rowsStack.alignment = .centerX
-        rowsStack.distribution = .fillEqually
         rowsStack.spacing = rowSpacing
-        rowsStack.setHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
 
         let bottomBar = makeBottomBar()
         let stack = NSStackView(views: [rowsStack, bottomBar])
@@ -163,14 +169,9 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
 
     // MARK: Rows
 
-    /// Swaps in one row per timer and grows or shrinks the window downward so each row keeps its height.
+    /// Swaps in one row per timer, then fits the window to them.
     private func rebuildRows(for ids: [UUID]) {
-        let shown = rowsStack.arrangedSubviews
-        let step = rowStep()
-        let newCount = max(1, ids.count)
-        let oldCount = shown.isEmpty ? newCount : shown.count
-
-        for view in shown {
+        for view in rowsStack.arrangedSubviews {
             rowsStack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
@@ -182,29 +183,13 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         }
         if ids.isEmpty { addRow(idleRow) }
         rowIDs = ids
-
-        guard newCount != oldCount else { return }
-        var frame = panel.frame
-        let top = frame.maxY
-        frame.size.height += CGFloat(newCount - oldCount) * step
-        if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
-            frame.size.height = min(frame.size.height, visible.height)
-            frame.origin.y = max(top - frame.size.height, visible.minY)
-        } else {
-            frame.origin.y = top - frame.size.height
-        }
-        place(frame)
-    }
-
-    /// Height one more row adds to the window: the row itself plus the spacing above it.
-    private func rowStep() -> CGFloat {
-        panel.contentView?.layoutSubtreeIfNeeded()
-        return (rowsStack.arrangedSubviews.first?.frame.height ?? 0) + rowSpacing
+        fitHeight()
     }
 
     private func makeRow(for id: UUID) -> TimerRowView {
         let row = TimerRowView(showsStop: true)
         row.isDropTarget = isDropTarget
+        row.tileHeight = tileSize.height
         row.onStop = { [weak self] in self?.model.remove(id: id) }
         return row
     }
@@ -217,16 +202,39 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
 
     // MARK: Window placement
 
+    /// Sizes the window to its tiles, keeping the top edge where it is. The user can resize only the width.
+    private func fitHeight() {
+        guard let content = panel.contentView else { return }
+        content.layoutSubtreeIfNeeded()
+        let contentHeight = content.fittingSize.height
+        panel.contentMinSize = NSSize(width: 220, height: contentHeight)
+        panel.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: contentHeight)
+
+        var frame = panel.frame
+        let top = frame.maxY
+        frame.size.height = panel.frameRect(forContentRect: NSRect(origin: .zero, size: NSSize(width: frame.width, height: contentHeight))).height
+        if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
+            frame.size.height = min(frame.size.height, visible.height)
+            frame.origin.y = max(top - frame.size.height, visible.minY)
+        } else {
+            frame.origin.y = top - frame.size.height
+        }
+        place(frame)
+    }
+
     private func place(_ frame: NSRect) {
         isPlacing = true
         panel.setFrame(frame, display: true)
         isPlacing = false
     }
 
-    /// Called at launch, while the window still shows a single row.
+    /// Puts the window back where the user left it. Only the top-left corner and width are used; the height comes from the tiles.
     private func restoreFrame() {
         if let saved = UserDefaults.standard.string(forKey: frameDefaultsKey) {
-            let frame = NSRectFromString(saved)
+            let savedFrame = NSRectFromString(saved)
+            var frame = panel.frame
+            frame.size.width = savedFrame.width
+            frame.origin = NSPoint(x: savedFrame.minX, y: savedFrame.maxY - frame.height)
             if isOnScreen(frame) {
                 place(frame)
                 return
@@ -255,16 +263,9 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         }
     }
 
-    /// Saves the frame as it would be with a single row, since that's what the window launches with.
     private func saveFrame() {
         guard !isPlacing else { return }
-        var frame = panel.frame
-        let extra = CGFloat(rowsStack.arrangedSubviews.count - 1) * rowStep()
-        if extra > 0 {
-            frame.origin.y += extra
-            frame.size.height -= extra
-        }
-        UserDefaults.standard.set(NSStringFromRect(frame), forKey: frameDefaultsKey)
+        UserDefaults.standard.set(NSStringFromRect(panel.frame), forKey: frameDefaultsKey)
     }
 
     func windowDidMove(_ notification: Notification) { saveFrame() }

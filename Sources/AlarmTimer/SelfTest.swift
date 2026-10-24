@@ -10,6 +10,7 @@ func runSelfTest() -> Bool {
     testPersistence(run)
     testOutlookMeeting(run)
     testSounds(run)
+    testTileSize(run)
     testRowLayout(run)
     print(run.failures == 0 ? "All self-tests passed" : "\(run.failures) self-test failure(s)")
     return run.failures == 0
@@ -194,6 +195,56 @@ private func testOutlookMeeting(_ run: SelfTestRun) {
     let allDay = "Holiday\nWhen: Monday, October 26, 2026."
     run.expect(OutlookMeeting.entry(fromText: allDay, now: now, timeZone: zone) == nil, "all-day meeting should be ignored")
     run.expect(OutlookMeeting.entry(fromText: "just some text", now: now, timeZone: zone) == nil, "plain text should be ignored")
+}
+
+@MainActor
+private func testTileSize(_ run: SelfTestRun) {
+    let small = TileSize.small.height
+    run.expect(TileSize.medium.height == small * 1.5 && TileSize.large.height == small * 2,
+               "Medium should be 50% and Large 100% taller than Small: \(TileSize.allCases.map(\.height))")
+    run.expect(TileSize.allCases.map(\.title) == ["Small", "Medium", "Large"], "tile size names wrong")
+    withTestDefaults { defaults in
+        run.expect(TileSize.current(in: defaults) == .medium, "default tile size should be Medium")
+        TileSize.large.save(in: defaults)
+        run.expect(TileSize.current(in: defaults) == .large, "saved tile size should be Large")
+        defaults.set("huge", forKey: TileSize.defaultsKey)
+        run.expect(TileSize.current(in: defaults) == .medium, "unknown tile size should fall back to Medium")
+    }
+
+    // The window fits its tiles: one more tile, or a bigger size, grows it by exactly that much.
+    withTestDefaults { defaults in
+        let model = TimerModel(defaults: defaults)
+        let controller = TimerWindowController(model: model, tileSize: .small)
+        let panel = controller.panel
+        func contentHeight() -> CGFloat { panel.contentRect(forFrameRect: panel.frame).height }
+        func tileHeights() -> [CGFloat] {
+            panel.contentView?.layoutSubtreeIfNeeded()
+            return findRows(in: panel.contentView).map { $0.frame.height }
+        }
+
+        let oneSmall = contentHeight()
+        run.expect(tileHeights() == [small], "idle tile should be Small height: \(tileHeights())")
+        model.add(EntryParser.parse("5m")!)
+        model.add(EntryParser.parse("10m")!)
+        controller.refresh()
+        let twoSmall = contentHeight()
+        run.expect(tileHeights() == [small, small], "timer tiles should be Small height: \(tileHeights())")
+        run.expect(abs(twoSmall - oneSmall - small - 6) < 0.5, "second tile should add its height plus spacing: \(twoSmall - oneSmall)")
+
+        controller.tileSize = .large
+        run.expect(tileHeights() == [small * 2, small * 2], "tiles should be Large height: \(tileHeights())")
+        run.expect(abs(contentHeight() - twoSmall - 2 * small) < 0.5, "window should grow with Large tiles: \(contentHeight() - twoSmall)")
+        let top = panel.frame.maxY
+        controller.tileSize = .medium
+        run.expect(abs(panel.frame.maxY - top) < 0.5, "resizing should keep the window's top edge in place")
+        model.removeAll()
+    }
+}
+
+private func findRows(in view: NSView?) -> [TimerRowView] {
+    guard let view else { return [] }
+    if let row = view as? TimerRowView { return [row] }
+    return view.subviews.flatMap(findRows(in:))
 }
 
 private func testSounds(_ run: SelfTestRun) {

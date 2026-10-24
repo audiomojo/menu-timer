@@ -1,7 +1,7 @@
 import AppKit
 
 /// The sound a finished timer rings with. Raw values are the macOS system sound names.
-enum AlarmSound: String, CaseIterable {
+enum AlarmSound: String, MenuChoice {
     case chime = "Glass"
     case ping = "Ping"
     case fanfare = "Hero"
@@ -46,35 +46,5 @@ enum AlarmSound: String, CaseIterable {
         } else {
             NSSound.beep()
         }
-    }
-}
-
-/// Builds the "Sound" submenu: one checkmarked item per sound; choosing one saves it and plays a preview.
-@MainActor
-final class SoundMenuController: NSObject, NSMenuDelegate {
-    func makeItem() -> NSMenuItem {
-        let menu = NSMenu(title: "Sound")
-        menu.delegate = self
-        for sound in AlarmSound.allCases {
-            let item = menu.addItem(withTitle: sound.title, action: #selector(choose(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = sound
-        }
-        let item = NSMenuItem(title: "Sound", action: nil, keyEquivalent: "")
-        item.submenu = menu
-        return item
-    }
-
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        let current = AlarmSound.current()
-        for item in menu.items {
-            item.state = item.representedObject as? AlarmSound == current ? .on : .off
-        }
-    }
-
-    @objc private func choose(_ item: NSMenuItem) {
-        guard let sound = item.representedObject as? AlarmSound else { return }
-        sound.save()
-        sound.play()
     }
 }

@@ -5,7 +5,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = TimerModel()
     private var statusItem: NSStatusItem!
     private var windowController: TimerWindowController!
-    private let soundMenu = SoundMenuController()
+    private let soundMenu = ChoiceMenuController<AlarmSound>(title: "Sound") { $0.play() }
+    private lazy var tileSizeMenu = ChoiceMenuController<TileSize>(title: "Tile Size") { [weak self] size in
+        self?.windowController.tileSize = size
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMainMenu()
@@ -22,9 +25,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         windowController = TimerWindowController(model: model)
-        // Right-clicking the window offers the sound choice too.
+        // Right-clicking the window offers the settings too.
         let windowMenu = NSMenu()
         windowMenu.addItem(soundMenu.makeItem())
+        windowMenu.addItem(tileSizeMenu.makeItem())
         windowController.panel.contextMenu = windowMenu
         model.onUpdate = { [weak self] in self?.refresh() }
         model.onFire = { [weak self] in self?.windowController.show() }
@@ -55,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.autoenablesItems = false
         menu.addItem(.separator())
         menu.addItem(soundMenu.makeItem())
+        menu.addItem(tileSizeMenu.makeItem())
         let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleOpenAtLogin), keyEquivalent: "")
         login.target = self
         login.state = LoginItem.isEnabled ? .on : .off
