@@ -8,6 +8,7 @@ func runSelfTest() -> Bool {
     testCountdownFormat(run)
     testModel(run)
     testPersistence(run)
+    testOutlookMeeting(run)
     testSounds(run)
     testRowLayout(run)
     print(run.failures == 0 ? "All self-tests passed" : "\(run.failures) self-test failure(s)")
@@ -168,6 +169,31 @@ private func testPersistence(_ run: SelfTestRun) {
         defaults.set(Data("not json".utf8), forKey: TimerModel.defaultsKey)
         run.expect(TimerModel(defaults: defaults).timers.isEmpty, "corrupt saved timers should restore nothing")
     }
+}
+
+private func testOutlookMeeting(_ run: SelfTestRun) {
+    let zone = TimeZone(identifier: "America/Los_Angeles")!
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = zone
+    let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 24, hour: 9))!
+    let nnbsp = "\u{202F}"  // what Outlook puts before "AM"
+    let dragged = "Pay Mom's Covington Bill\nWhen: Friday, October 30, 2026 at 9:30\(nnbsp)AM - 10:00\(nnbsp)AM.\nLocation: \n"
+
+    let entry = OutlookMeeting.entry(fromText: dragged, now: now, timeZone: zone)
+    let expected = calendar.date(from: DateComponents(year: 2026, month: 10, day: 30, hour: 9, minute: 30))!
+    run.expect(entry?.kind == .alarm && entry?.end == expected && entry?.label == "Pay Mom's Covington Bill",
+               "Outlook drop parsed wrong: \(String(describing: entry))")
+
+    let afternoon = "Standup\r\nWhen: Saturday, October 24, 2026 at 2:05 PM - 2:20 PM.\r\nLocation: Room 4"
+    run.expect(OutlookMeeting.entry(fromText: afternoon, now: now, timeZone: zone)?.end
+               == calendar.date(from: DateComponents(year: 2026, month: 10, day: 24, hour: 14, minute: 5)),
+               "Outlook drop with CRLF and PM parsed wrong")
+
+    let started = "Earlier\nWhen: Saturday, October 24, 2026 at 8:30 AM - 9:30 AM."
+    run.expect(OutlookMeeting.entry(fromText: started, now: now, timeZone: zone) == nil, "meeting that already started should be ignored")
+    let allDay = "Holiday\nWhen: Monday, October 26, 2026."
+    run.expect(OutlookMeeting.entry(fromText: allDay, now: now, timeZone: zone) == nil, "all-day meeting should be ignored")
+    run.expect(OutlookMeeting.entry(fromText: "just some text", now: now, timeZone: zone) == nil, "plain text should be ignored")
 }
 
 private func testSounds(_ run: SelfTestRun) {

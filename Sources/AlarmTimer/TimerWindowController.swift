@@ -23,6 +23,12 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         formatter.timeStyle = .short
         return formatter
     }()
+    /// For alarms on another day, e.g. a meeting dragged in from later in the week: "Fri 9:30 AM".
+    private let dayTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("EEEjmm")
+        return formatter
+    }()
 
     init(model: TimerModel) {
         self.model = model
@@ -81,7 +87,8 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
             row.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -12).isActive = true
         }
 
-        let content = NSView()
+        let content = MeetingDropView()
+        content.onDrop = { [weak self] entry in self?.model.add(entry) ?? false }
         content.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: content.topAnchor),
@@ -140,7 +147,8 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
     }
 
     private func caption(for item: TimerModel.Item) -> String {
-        let end = timeFormatter.string(from: item.entry.end)
+        let formatter = Calendar.current.isDateInToday(item.entry.end) ? timeFormatter : dayTimeFormatter
+        let end = formatter.string(from: item.entry.end)
         switch item.entry.kind {
         case .alarm: return "Alarm · \(end)"
         case .timer: return item.isRinging ? "Time's up!" : "Timer · ends \(end)"
