@@ -1,6 +1,7 @@
 import Foundation
 
-/// Parser checks, run with `AlarmTimer --self-test` (XCTest isn't available without Xcode).
+/// Parser and model checks, run with `AlarmTimer --self-test` (XCTest isn't available without Xcode).
+@MainActor
 func runSelfTest() -> Bool {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
@@ -52,6 +53,28 @@ func runSelfTest() -> Bool {
         failures += 1
         print("FAIL format \(interval): expected \(expected), got \(formatCountdown(interval))")
     }
+
+    // Adding a timer or alarm that's already counting down is ignored.
+    func expect(_ condition: Bool, _ message: String) {
+        if !condition {
+            failures += 1
+            print("FAIL \(message)")
+        }
+    }
+    let model = TimerModel()
+    let later = Date().addingTimeInterval(1)
+    expect(model.add(EntryParser.parse("5m")!), "first 5m timer should be added")
+    expect(!model.add(EntryParser.parse("5m")!), "second 5m timer should be ignored")
+    expect(!model.add(EntryParser.parse("5 min", now: later)!), "5 min entered later should match running 5m")
+    expect(!model.add(EntryParser.parse("300s")!), "300s should match running 5m")
+    expect(model.add(EntryParser.parse("10m")!), "10m timer should be added")
+    expect(model.add(EntryParser.parse("2:30pm")!), "first 2:30pm alarm should be added")
+    expect(!model.add(EntryParser.parse("2:30 PM")!), "second 2:30pm alarm should be ignored")
+    expect(model.add(EntryParser.parse("2:31pm")!), "2:31pm alarm should be added")
+    expect(model.timers.count == 4, "expected 4 entries, got \(model.timers.count)")
+    model.removeAll()
+    expect(model.add(EntryParser.parse("5m")!), "5m should be added again after stopping")
+    model.removeAll()
 
     print(failures == 0 ? "All self-tests passed" : "\(failures) self-test failure(s)")
     return failures == 0

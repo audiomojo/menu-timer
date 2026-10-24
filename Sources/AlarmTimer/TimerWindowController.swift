@@ -253,7 +253,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
             return
         }
         field.stringValue = ""
-        model.add(entry)
+        if !model.add(entry) { NSSound.beep() }  // already running
     }
 
     func controlTextDidChange(_ obj: Notification) {

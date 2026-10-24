@@ -27,9 +27,14 @@ final class TimerModel: NSObject {
     /// Time left on whichever timer finishes first; nil when nothing is running.
     var soonestRemaining: TimeInterval? { timers.map(\.remaining).min() }
 
-    func add(_ entry: Entry) {
+    /// Adds the entry unless the same timer or alarm is already counting down.
+    /// Returns false when it was a duplicate and nothing was added.
+    @discardableResult
+    func add(_ entry: Entry) -> Bool {
+        guard !timers.contains(where: { !$0.isRinging && $0.entry.isSame(as: entry) }) else { return false }
         timers.append(Item(entry: entry))
         changed()
+        return true
     }
 
     func remove(id: UUID) {
@@ -74,5 +79,13 @@ final class TimerModel: NSObject {
             if let sound = NSSound(named: "Glass") { sound.play() } else { NSSound.beep() }
         }
         onUpdate?()
+    }
+}
+
+private extension Entry {
+    /// Timers match on length, alarms on the time they go off.
+    func isSame(as other: Entry) -> Bool {
+        guard kind == other.kind else { return false }
+        return kind == .timer ? duration == other.duration : end == other.end
     }
 }
