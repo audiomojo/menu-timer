@@ -76,6 +76,12 @@ func runSelfTest() -> Bool {
     expect(model.add(EntryParser.parse("5m")!), "5m should be added again after stopping")
     model.removeAll()
 
+    // Timers are listed with the soonest to go off first.
+    for text in ["5m", "1h", "30s", "20m", "10m"] { model.add(EntryParser.parse(text)!) }
+    let order = model.timers.compactMap(\.entry.duration)
+    expect(order == [30, 300, 600, 1200, 3600], "expected soonest-first order, got \(order)")
+    model.removeAll()
+
     print(failures == 0 ? "All self-tests passed" : "\(failures) self-test failure(s)")
     return failures == 0
 }

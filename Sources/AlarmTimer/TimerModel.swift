@@ -12,7 +12,7 @@ final class TimerModel: NSObject {
         }
     }
 
-    /// Running and ringing timers, in the order they were started.
+    /// Running and ringing timers, soonest-ending first (next to go off at the top).
     private(set) var timers: [Item] = []
     /// Called on every tick and on every change to `timers`.
     var onUpdate: (() -> Void)?
@@ -32,7 +32,8 @@ final class TimerModel: NSObject {
     @discardableResult
     func add(_ entry: Entry) -> Bool {
         guard !timers.contains(where: { !$0.isRinging && $0.entry.isSame(as: entry) }) else { return false }
-        timers.append(Item(entry: entry))
+        let index = timers.firstIndex { $0.entry.end > entry.end } ?? timers.endIndex
+        timers.insert(Item(entry: entry), at: index)
         changed()
         return true
     }
