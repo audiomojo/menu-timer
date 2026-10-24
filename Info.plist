@@ -6,6 +6,8 @@
     <string>AlarmTimer</string>
     <key>CFBundleDisplayName</key>
     <string>Alarm Timer</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>local.alarmtimer</string>
     <key>CFBundleExecutable</key>
