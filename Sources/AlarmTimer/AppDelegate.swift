@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMainMenu()
+        LoginItem.enableOnFirstLaunch()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
@@ -54,12 +55,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.autoenablesItems = false
         menu.addItem(.separator())
         menu.addItem(soundMenu.makeItem())
+        let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleOpenAtLogin), keyEquivalent: "")
+        login.target = self
+        login.state = LoginItem.isEnabled ? .on : .off
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Alarm Timer", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         // Attach the menu only for this click so left-click keeps toggling the window.
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil
+    }
+
+    @objc private func toggleOpenAtLogin() {
+        LoginItem.setEnabled(!LoginItem.isEnabled)
     }
 
     @objc private func stopAll() {

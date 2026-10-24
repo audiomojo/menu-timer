@@ -1,6 +1,7 @@
 import AppKit
 
 /// The running and ringing timers, the clock that advances them, and the ring while any are done.
+/// Timers are saved on every change and restored at launch, so they survive quitting and restarts.
 @MainActor
 final class TimerModel: NSObject {
     struct Item {
@@ -27,10 +28,23 @@ final class TimerModel: NSObject {
     /// Called when one or more timers reach zero.
     var onFire: (() -> Void)?
 
+    private let defaults: UserDefaults
+    static let defaultsKey = "timers"
+
     private var ticker: Timer?
     private let tickInterval: TimeInterval = 0.2
     private var lastRing = Date.distantPast
     private let ringInterval: TimeInterval = 1.5
+
+    /// Restores saved timers. Any that ran out while the app wasn't running ring on the first tick.
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        super.init()
+        let saved = defaults.data(forKey: Self.defaultsKey)
+            .flatMap { try? JSONDecoder().decode([Entry].self, from: $0) } ?? []
+        timers = saved.sorted { $0.end < $1.end }.map { Item(entry: $0) }
+        changed()
+    }
 
     var isRinging: Bool { timers.contains { $0.isRinging } }
     /// Time left on whichever timer finishes first; nil when nothing is running.
@@ -62,8 +76,9 @@ final class TimerModel: NSObject {
         changed()
     }
 
-    /// Runs the clock only while there's something to count down.
+    /// Saves the timers and runs the clock only while there's something to count down.
     private func changed() {
+        save()
         if timers.isEmpty {
             ticker?.invalidate()
             ticker = nil
@@ -73,6 +88,12 @@ final class TimerModel: NSObject {
             ticker = timer
         }
         onUpdate?()
+    }
+
+    private func save() {
+        if let data = try? JSONEncoder().encode(timers.map(\.entry)) {
+            defaults.set(data, forKey: Self.defaultsKey)
+        }
     }
 
     @objc private func tick() {

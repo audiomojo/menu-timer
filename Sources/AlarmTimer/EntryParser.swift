@@ -1,7 +1,7 @@
 import Foundation
 
-struct Entry {
-    enum Kind { case timer, alarm }
+struct Entry: Codable {
+    enum Kind: String, Codable { case timer, alarm }
     let kind: Kind
     let end: Date
     /// Text typed after the time, e.g. "Flip Pancakes" in "5m Flip Pancakes".

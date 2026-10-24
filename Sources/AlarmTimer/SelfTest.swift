@@ -7,6 +7,7 @@ func runSelfTest() -> Bool {
     testParser(run)
     testCountdownFormat(run)
     testModel(run)
+    testPersistence(run)
     testSounds(run)
     testRowLayout(run)
     print(run.failures == 0 ? "All self-tests passed" : "\(run.failures) self-test failure(s)")
@@ -90,34 +91,83 @@ private func testCountdownFormat(_ run: SelfTestRun) {
     }
 }
 
+/// Scratch settings for tests, so they never touch the app's saved timers or sound.
+private func withTestDefaults(_ body: (UserDefaults) -> Void) {
+    let suite = "AlarmTimer.selftest"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    defer { defaults.removePersistentDomain(forName: suite) }
+    body(defaults)
+}
+
 @MainActor
 private func testModel(_ run: SelfTestRun) {
-    let model = TimerModel()
-    let start = Date()
-    func add(_ text: String, after seconds: TimeInterval = 0) -> Bool {
-        model.add(EntryParser.parse(text, now: start.addingTimeInterval(seconds))!)
+    withTestDefaults { defaults in
+        let model = TimerModel(defaults: defaults)
+        let start = Date()
+        @MainActor func add(_ text: String, after seconds: TimeInterval = 0) -> Bool {
+            model.add(EntryParser.parse(text, now: start.addingTimeInterval(seconds))!)
+        }
+
+        // Adding something that would go off at the same time as a running entry is ignored.
+        run.expect(add("5m"), "first 5m timer should be added")
+        run.expect(!add("5m"), "5m entered at the same moment should be ignored")
+        run.expect(!add("300s", after: 0.3), "300s entered a moment later ends at the same time and should be ignored")
+        run.expect(add("5m", after: 30), "5m entered 30s later ends later and should be added")
+        run.expect(add("20m"), "first 20m timer should be added")
+        run.expect(add("20m", after: 5), "20m entered 5s later should be added")
+        run.expect(add("9pm"), "first 9pm alarm should be added")
+        run.expect(!add("9:00 PM", after: 10), "second 9pm alarm should be ignored")
+        run.expect(add("9:01pm"), "9:01pm alarm should be added")
+        run.expect(model.timers.count == 6, "expected 6 entries, got \(model.timers.count)")
+        model.removeAll()
+        run.expect(add("5m"), "5m should be added again after stopping")
+        model.removeAll()
+
+        // Entries are listed with the soonest to go off first.
+        for text in ["5m", "1h", "30s", "20m", "10m"] { _ = add(text) }
+        let order = model.timers.map { $0.entry.end.timeIntervalSince(start) }
+        run.expect(order == [30, 300, 600, 1200, 3600], "expected soonest-first order, got \(order)")
+        model.removeAll()
     }
+}
 
-    // Adding something that would go off at the same time as a running entry is ignored.
-    run.expect(add("5m"), "first 5m timer should be added")
-    run.expect(!add("5m"), "5m entered at the same moment should be ignored")
-    run.expect(!add("300s", after: 0.3), "300s entered a moment later ends at the same time and should be ignored")
-    run.expect(add("5m", after: 30), "5m entered 30s later ends later and should be added")
-    run.expect(add("20m"), "first 20m timer should be added")
-    run.expect(add("20m", after: 5), "20m entered 5s later should be added")
-    run.expect(add("9pm"), "first 9pm alarm should be added")
-    run.expect(!add("9:00 PM", after: 10), "second 9pm alarm should be ignored")
-    run.expect(add("9:01pm"), "9:01pm alarm should be added")
-    run.expect(model.timers.count == 6, "expected 6 entries, got \(model.timers.count)")
-    model.removeAll()
-    run.expect(add("5m"), "5m should be added again after stopping")
-    model.removeAll()
+@MainActor
+private func testPersistence(_ run: SelfTestRun) {
+    withTestDefaults { defaults in
+        // Timers come back after a relaunch with the same end time, kind, label and order.
+        let first = TimerModel(defaults: defaults)
+        run.expect(first.timers.isEmpty, "nothing saved should restore no timers")
+        first.add(EntryParser.parse("20m Laundry")!)
+        first.add(EntryParser.parse("5m")!)
+        first.add(EntryParser.parse("9pm Call Mom")!)
+        let saved = first.timers.map(\.entry)
 
-    // Entries are listed with the soonest to go off first.
-    for text in ["5m", "1h", "30s", "20m", "10m"] { _ = add(text) }
-    let order = model.timers.map { $0.entry.end.timeIntervalSince(start) }
-    run.expect(order == [30, 300, 600, 1200, 3600], "expected soonest-first order, got \(order)")
-    model.removeAll()
+        let relaunched = TimerModel(defaults: defaults)
+        let restored = relaunched.timers.map(\.entry)
+        run.expect(restored.map(\.end) == saved.map(\.end), "restored end times differ: \(restored.map(\.end)) vs \(saved.map(\.end))")
+        run.expect(restored.map(\.kind) == saved.map(\.kind), "restored kinds differ")
+        run.expect(restored.map(\.label) == saved.map(\.label), "restored labels differ: \(restored.map(\.label))")
+        run.expect(relaunched.soonestRemaining.map { $0 > 290 && $0 <= 300 } == true,
+                   "restored 5m timer should still be counting down, got \(String(describing: relaunched.soonestRemaining))")
+
+        // Stopping a timer is saved too.
+        relaunched.timers.first.map { relaunched.remove(id: $0.id) }
+        run.expect(TimerModel(defaults: defaults).timers.count == 2, "removed timer should stay removed after relaunch")
+        relaunched.removeAll()
+        run.expect(TimerModel(defaults: defaults).timers.isEmpty, "Stop All should leave nothing to restore")
+
+        // A timer that ran out while the app was closed is due right away, so it rings on launch.
+        let past = EntryParser.parse("1m Tea", now: Date().addingTimeInterval(-3600))!
+        defaults.set(try! JSONEncoder().encode([past]), forKey: TimerModel.defaultsKey)
+        let afterRestart = TimerModel(defaults: defaults)
+        run.expect(afterRestart.timers.first?.isDue == true, "timer that ended while closed should be due on launch")
+        afterRestart.removeAll()
+
+        // Unreadable saved data is ignored rather than crashing.
+        defaults.set(Data("not json".utf8), forKey: TimerModel.defaultsKey)
+        run.expect(TimerModel(defaults: defaults).timers.isEmpty, "corrupt saved timers should restore nothing")
+    }
 }
 
 private func testSounds(_ run: SelfTestRun) {
@@ -128,15 +178,13 @@ private func testSounds(_ run: SelfTestRun) {
         run.expect(NSSound(named: sound.rawValue) != nil, "system sound \(sound.rawValue) for \(sound.title) is missing")
     }
 
-    let suite = "AlarmTimer.selftest"
-    let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
-    defer { defaults.removePersistentDomain(forName: suite) }
-    run.expect(AlarmSound.current(in: defaults) == .chime, "default sound should be Chime")
-    AlarmSound.sonar.save(in: defaults)
-    run.expect(AlarmSound.current(in: defaults) == .sonar, "saved sound should be Sonar")
-    defaults.set("NoSuchSound", forKey: AlarmSound.defaultsKey)
-    run.expect(AlarmSound.current(in: defaults) == .chime, "unknown saved sound should fall back to Chime")
+    withTestDefaults { defaults in
+        run.expect(AlarmSound.current(in: defaults) == .chime, "default sound should be Chime")
+        AlarmSound.sonar.save(in: defaults)
+        run.expect(AlarmSound.current(in: defaults) == .sonar, "saved sound should be Sonar")
+        defaults.set("NoSuchSound", forKey: AlarmSound.defaultsKey)
+        run.expect(AlarmSound.current(in: defaults) == .chime, "unknown saved sound should fall back to Chime")
+    }
 }
 
 @MainActor
