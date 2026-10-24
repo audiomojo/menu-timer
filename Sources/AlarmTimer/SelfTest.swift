@@ -121,23 +121,24 @@ func runSelfTest() -> Bool {
     expect(AlarmSound.current(in: defaults) == .chime, "unknown saved sound should fall back to Chime")
     defaults.removePersistentDomain(forName: suite)
 
-    // The countdown is centered on the row and stays clear of the caption and label.
-    for height: CGFloat in [120, 160, 200] {
+    // The countdown sits below the caption (and label, when there is one) with a gap, filling the rest of the row.
+    for (labelText, height) in [("Flip Pancakes", 100.0), ("Flip Pancakes", 200.0), ("", 100.0), ("", 200.0)] as [(String, CGFloat)] {
         let row = TimerRowView(showsStop: true)
         row.caption.stringValue = "Timer · ends 9:00 PM"
-        row.label.stringValue = "Flip Pancakes"
+        row.labelText = labelText
         row.countdown.text = "12:34"
         row.frame = NSRect(x: 0, y: 0, width: 300, height: height)
         row.layoutSubtreeIfNeeded()
         let box = row.countdown.frame
-        expect(abs(box.midY - height / 2) < 0.5 && abs(box.midX - 150) < 0.5,
-               "countdown area off center in \(height)pt row: \(box)")
-        expect(box.maxY <= row.label.frame.minY, "countdown overlaps label in \(height)pt row")
-        expect(box.height >= 30, "countdown area too small in \(height)pt row: \(box.height)")
+        let above = labelText.isEmpty ? row.caption.frame : row.label.frame
+        let name = "\(labelText.isEmpty ? "unlabeled" : "labeled") \(height)pt row"
+        expect(row.label.isHidden == labelText.isEmpty, "label visibility wrong in \(name)")
+        expect(abs(above.minY - box.maxY - 8) < 0.5, "gap above countdown should be 8pt in \(name): \(above.minY - box.maxY)")
+        expect(abs(box.minY - 6) < 0.5 && abs(box.midX - 150) < 0.5, "countdown should fill to the bottom, centered across, in \(name): \(box)")
         if let digits = row.countdown.textRect() {
-            expect(abs(digits.digitsMidY - box.height / 2) < 0.5, "digits not vertically centered: \(digits.digitsMidY) vs \(box.height / 2)")
+            expect(abs(digits.digitsMidY - box.height / 2) < 0.5, "digits not centered in their area in \(name)")
         } else {
-            expect(false, "countdown has nothing to draw")
+            expect(false, "countdown has nothing to draw in \(name)")
         }
     }
 

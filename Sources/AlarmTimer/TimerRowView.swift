@@ -3,10 +3,25 @@ import AppKit
 /// One stacked sub-panel: a caption, a label line, an optional stop (circled x) button, and a countdown.
 final class TimerRowView: NSView {
     let caption = NSTextField(labelWithString: "")
-    /// The user's text for the timer; blank when there isn't one.
     let label = NSTextField(labelWithString: "")
     let countdown = CountdownView()
     var onStop: (() -> Void)?
+
+    /// The user's text for the timer. When blank the label line is hidden and the countdown moves up into its space.
+    var labelText = "" {
+        didSet {
+            guard labelText != oldValue else { return }
+            label.stringValue = labelText
+            let hasLabel = !labelText.isEmpty
+            label.isHidden = !hasLabel
+            countdownBelowCaption.isActive = !hasLabel
+            countdownBelowLabel.isActive = hasLabel
+        }
+    }
+    /// Space between the text above and the countdown.
+    private let countdownGap: CGFloat = 8
+    private lazy var countdownBelowCaption = countdown.topAnchor.constraint(equalTo: caption.bottomAnchor, constant: countdownGap)
+    private lazy var countdownBelowLabel = countdown.topAnchor.constraint(equalTo: label.bottomAnchor, constant: countdownGap)
 
     init(showsStop: Bool) {
         super.init(frame: .zero)
@@ -27,6 +42,7 @@ final class TimerRowView: NSView {
         caption.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         caption.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
+        label.isHidden = true
         label.textColor = .labelColor
         label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
         label.lineBreakMode = .byTruncatingTail
@@ -40,8 +56,6 @@ final class TimerRowView: NSView {
         }
         // Equal side insets keep the caption centered whether or not the stop button is shown.
         let sideInset: CGFloat = 28
-        let fill = countdown.heightAnchor.constraint(equalTo: heightAnchor)
-        fill.priority = .defaultLow
         NSLayoutConstraint.activate([
             background.topAnchor.constraint(equalTo: topAnchor),
             background.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -56,15 +70,12 @@ final class TimerRowView: NSView {
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: sideInset),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -sideInset),
 
-            // Centered on the whole row: as tall as it can be while staying clear of the label above
-            // and keeping the same gap below.
-            countdown.centerYAnchor.constraint(equalTo: centerYAnchor),
-            countdown.topAnchor.constraint(greaterThanOrEqualTo: label.bottomAnchor, constant: 2),
-            fill,
+            countdownBelowCaption,
+            countdown.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
             countdown.leadingAnchor.constraint(equalTo: leadingAnchor),
             countdown.trailingAnchor.constraint(equalTo: trailingAnchor),
 
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 84),
         ])
 
         if showsStop {

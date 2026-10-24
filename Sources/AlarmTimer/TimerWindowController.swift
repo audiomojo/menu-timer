@@ -136,7 +136,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         for item in model.timers {
             guard let row = rows[item.id] else { continue }
             let end = timeFormatter.string(from: item.entry.end)
-            row.label.stringValue = item.entry.label
+            row.labelText = item.entry.label
             row.countdown.text = formatCountdown(item.remaining)
             if item.isRinging {
                 row.countdown.color = flashOn ? .systemRed : .labelColor
