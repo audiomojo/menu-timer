@@ -6,6 +6,14 @@ final class TimerRowView: NSView {
     let label = TimerRowView.makeLine(font: .systemFont(ofSize: NSFont.systemFontSize, weight: .medium), color: .labelColor)
     let countdown = CountdownView()
     var onStop: (() -> Void)?
+    private let background = TimerRowView.makeBackground()
+
+    /// Outlines the tile while a meeting is dragged over the window, to show it can be dropped.
+    var isDropTarget = false {
+        didSet { background.borderWidth = isDropTarget ? Self.dropOutlineWidth : 0 }
+    }
+    static let dropOutlineWidth: CGFloat = 2
+    var outlineWidth: CGFloat { background.borderWidth }
 
     /// The user's text for the timer. When blank the label line is hidden and the countdown moves up into its space.
     var labelText = "" {
@@ -32,7 +40,6 @@ final class TimerRowView: NSView {
         super.init(frame: .zero)
         label.isHidden = true
 
-        let background = Self.makeBackground()
         for view in [background, countdown, caption, label] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
@@ -101,6 +108,7 @@ final class TimerRowView: NSView {
         let background = NSBox()
         background.boxType = .custom
         background.borderWidth = 0
+        background.borderColor = .controlAccentColor
         background.cornerRadius = 8
         background.fillColor = NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua

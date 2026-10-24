@@ -10,6 +10,11 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
     private let idleRow = TimerRowView(showsStop: false)
     private var rows: [UUID: TimerRowView] = [:]
     private var rowIDs: [UUID] = []
+    /// True while a droppable meeting is dragged over the window; every tile is outlined.
+    private var isDropTarget = false {
+        didSet { allRows.forEach { $0.isDropTarget = isDropTarget } }
+    }
+    private var allRows: [TimerRowView] { [idleRow] + rows.values }
     private let field = NSTextField()
     private let startButton = NSButton(title: "Start", target: nil, action: nil)
 
@@ -89,6 +94,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
 
         let content = MeetingDropView()
         content.onDrop = { [weak self] entry in self?.model.add(entry) ?? false }
+        content.onDropTargetChanged = { [weak self] targeted in self?.isDropTarget = targeted }
         content.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: content.topAnchor),
@@ -198,6 +204,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
 
     private func makeRow(for id: UUID) -> TimerRowView {
         let row = TimerRowView(showsStop: true)
+        row.isDropTarget = isDropTarget
         row.onStop = { [weak self] in self?.model.remove(id: id) }
         return row
     }

@@ -236,6 +236,13 @@ private func testRowLayout(_ run: SelfTestRun) {
             testDigits(run, in: row.countdown, name: name)
         }
     }
+
+    let row = TimerRowView(showsStop: false)
+    run.expect(row.outlineWidth == 0, "tile shouldn't be outlined until a meeting is dragged over")
+    row.isDropTarget = true
+    run.expect(row.outlineWidth == TimerRowView.dropOutlineWidth, "tile should be outlined while a meeting is dragged over")
+    row.isDropTarget = false
+    run.expect(row.outlineWidth == 0, "outline should clear when the drag leaves")
 }
 
 /// The digits are centered on their own height and drawn at `sizeFactor` of the largest size that fits.
