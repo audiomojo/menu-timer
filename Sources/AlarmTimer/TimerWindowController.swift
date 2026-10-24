@@ -43,7 +43,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
     // MARK: Setup
 
     private func configurePanel() {
-        panel.title = "Alarm Timer"
+        panel.title = "Alarm / Timer"
         // Any click in the window silences (and clears) the timers that are ringing.
         panel.onMouseDown = { [weak self] in
             guard let self, self.model.isRinging else { return }
