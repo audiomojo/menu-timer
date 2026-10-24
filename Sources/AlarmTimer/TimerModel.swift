@@ -79,7 +79,7 @@ final class TimerModel: NSObject {
         }
         if isRinging, Date().timeIntervalSince(lastRing) >= ringInterval {
             lastRing = Date()
-            if let sound = NSSound(named: "Glass") { sound.play() } else { NSSound.beep() }
+            AlarmSound.current().play()
         }
         onUpdate?()
     }

@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// Parser and model checks, run with `AlarmTimer --self-test` (XCTest isn't available without Xcode).
 @MainActor
@@ -104,6 +104,22 @@ func runSelfTest() -> Bool {
     let order = model.timers.map { $0.entry.end.timeIntervalSince(start) }
     expect(order == [30, 300, 600, 1200, 3600], "expected soonest-first order, got \(order)")
     model.removeAll()
+
+    // Ten named sounds that all exist, defaulting to Chime and remembering the choice.
+    expect(AlarmSound.allCases.count == 10, "expected 10 sounds, got \(AlarmSound.allCases.count)")
+    expect(Set(AlarmSound.allCases.map(\.title)).count == 10, "sound names should be unique")
+    for sound in AlarmSound.allCases where NSSound(named: sound.rawValue) == nil {
+        expect(false, "system sound \(sound.rawValue) for \(sound.title) is missing")
+    }
+    let suite = "AlarmTimer.selftest"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    expect(AlarmSound.current(in: defaults) == .chime, "default sound should be Chime")
+    AlarmSound.sonar.save(in: defaults)
+    expect(AlarmSound.current(in: defaults) == .sonar, "saved sound should be Sonar")
+    defaults.set("NoSuchSound", forKey: AlarmSound.defaultsKey)
+    expect(AlarmSound.current(in: defaults) == .chime, "unknown saved sound should fall back to Chime")
+    defaults.removePersistentDomain(forName: suite)
 
     print(failures == 0 ? "All self-tests passed" : "\(failures) self-test failure(s)")
     return failures == 0

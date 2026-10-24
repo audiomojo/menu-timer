@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = TimerModel()
     private var statusItem: NSStatusItem!
     private var windowController: TimerWindowController!
+    private let soundMenu = SoundMenuController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMainMenu()
@@ -20,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         windowController = TimerWindowController(model: model)
+        // Right-clicking the window offers the sound choice too.
+        let windowMenu = NSMenu()
+        windowMenu.addItem(soundMenu.makeItem())
+        windowController.panel.contextMenu = windowMenu
         model.onUpdate = { [weak self] in self?.refresh() }
         model.onFire = { [weak self] in self?.windowController.show() }
         refresh()
@@ -47,6 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stop.target = self
         stop.isEnabled = !model.timers.isEmpty
         menu.autoenablesItems = false
+        menu.addItem(.separator())
+        menu.addItem(soundMenu.makeItem())
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Alarm Timer", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         // Attach the menu only for this click so left-click keeps toggling the window.
