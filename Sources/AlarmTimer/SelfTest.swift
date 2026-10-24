@@ -61,24 +61,29 @@ func runSelfTest() -> Bool {
             print("FAIL \(message)")
         }
     }
+    // Adding something that would go off at the same time as a running entry is ignored.
     let model = TimerModel()
-    let later = Date().addingTimeInterval(1)
-    expect(model.add(EntryParser.parse("5m")!), "first 5m timer should be added")
-    expect(!model.add(EntryParser.parse("5m")!), "second 5m timer should be ignored")
-    expect(!model.add(EntryParser.parse("5 min", now: later)!), "5 min entered later should match running 5m")
-    expect(!model.add(EntryParser.parse("300s")!), "300s should match running 5m")
-    expect(model.add(EntryParser.parse("10m")!), "10m timer should be added")
-    expect(model.add(EntryParser.parse("2:30pm")!), "first 2:30pm alarm should be added")
-    expect(!model.add(EntryParser.parse("2:30 PM")!), "second 2:30pm alarm should be ignored")
-    expect(model.add(EntryParser.parse("2:31pm")!), "2:31pm alarm should be added")
-    expect(model.timers.count == 4, "expected 4 entries, got \(model.timers.count)")
+    let start = Date()
+    func add(_ text: String, after seconds: TimeInterval = 0) -> Bool {
+        model.add(EntryParser.parse(text, now: start.addingTimeInterval(seconds))!)
+    }
+    expect(add("5m"), "first 5m timer should be added")
+    expect(!add("5m"), "5m entered at the same moment should be ignored")
+    expect(!add("300s", after: 0.3), "300s entered a moment later ends at the same time and should be ignored")
+    expect(add("5m", after: 30), "5m entered 30s later ends later and should be added")
+    expect(add("20m"), "first 20m timer should be added")
+    expect(add("20m", after: 5), "20m entered 5s later should be added")
+    expect(add("9pm"), "first 9pm alarm should be added")
+    expect(!add("9:00 PM", after: 10), "second 9pm alarm should be ignored")
+    expect(add("9:01pm"), "9:01pm alarm should be added")
+    expect(model.timers.count == 6, "expected 6 entries, got \(model.timers.count)")
     model.removeAll()
-    expect(model.add(EntryParser.parse("5m")!), "5m should be added again after stopping")
+    expect(add("5m"), "5m should be added again after stopping")
     model.removeAll()
 
-    // Timers are listed with the soonest to go off first.
-    for text in ["5m", "1h", "30s", "20m", "10m"] { model.add(EntryParser.parse(text)!) }
-    let order = model.timers.compactMap(\.entry.duration)
+    // Entries are listed with the soonest to go off first.
+    for text in ["5m", "1h", "30s", "20m", "10m"] { _ = add(text) }
+    let order = model.timers.map { $0.entry.end.timeIntervalSince(start) }
     expect(order == [30, 300, 600, 1200, 3600], "expected soonest-first order, got \(order)")
     model.removeAll()
 

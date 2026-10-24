@@ -4,8 +4,6 @@ struct Entry: Equatable {
     enum Kind { case timer, alarm }
     let kind: Kind
     let end: Date
-    /// Length of a timer as entered; nil for alarms.
-    var duration: TimeInterval? = nil
 }
 
 enum EntryParser {
@@ -17,7 +15,7 @@ enum EntryParser {
 
         if let seconds = duration(text) {
             guard seconds >= 1 else { return nil }
-            return Entry(kind: .timer, end: now.addingTimeInterval(seconds), duration: seconds)
+            return Entry(kind: .timer, end: now.addingTimeInterval(seconds))
         }
         if let end = clockTime(text, now: now, calendar: calendar) {
             return Entry(kind: .alarm, end: end)

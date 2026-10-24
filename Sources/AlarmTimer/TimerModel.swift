@@ -27,11 +27,13 @@ final class TimerModel: NSObject {
     /// Time left on whichever timer finishes first; nil when nothing is running.
     var soonestRemaining: TimeInterval? { timers.map(\.remaining).min() }
 
-    /// Adds the entry unless the same timer or alarm is already counting down.
+    /// Adds the entry unless something still counting down would go off at the same time.
     /// Returns false when it was a duplicate and nothing was added.
     @discardableResult
     func add(_ entry: Entry) -> Bool {
-        guard !timers.contains(where: { !$0.isRinging && $0.entry.isSame(as: entry) }) else { return false }
+        // Within a second counts as the same time, since that's all the countdown shows.
+        let duplicate = timers.contains { !$0.isRinging && abs($0.entry.end.timeIntervalSince(entry.end)) < 1 }
+        guard !duplicate else { return false }
         let index = timers.firstIndex { $0.entry.end > entry.end } ?? timers.endIndex
         timers.insert(Item(entry: entry), at: index)
         changed()
@@ -80,13 +82,5 @@ final class TimerModel: NSObject {
             if let sound = NSSound(named: "Glass") { sound.play() } else { NSSound.beep() }
         }
         onUpdate?()
-    }
-}
-
-private extension Entry {
-    /// Timers match on length, alarms on the time they go off.
-    func isSame(as other: Entry) -> Bool {
-        guard kind == other.kind else { return false }
-        return kind == .timer ? duration == other.duration : end == other.end
     }
 }
