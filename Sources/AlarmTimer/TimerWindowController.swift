@@ -1,29 +1,6 @@
 import AppKit
 
-/// Panel that reports every mouse-down inside it (title bar included).
-final class ClickReportingPanel: NSPanel {
-    var onMouseDown: (() -> Void)?
-    /// Shown on right-click anywhere except the text field, which keeps its own edit menu.
-    var contextMenu: NSMenu?
-
-    override func sendEvent(_ event: NSEvent) {
-        if event.type == .rightMouseDown, let menu = contextMenu, let content = contentView {
-            let hit = content.hitTest(content.convert(event.locationInWindow, from: nil))
-            let inTextField = hit is NSText || (hit as? NSTextField)?.isEditable == true
-            if !inTextField {
-                onMouseDown?()
-                NSMenu.popUpContextMenu(menu, with: event, for: content)
-                return
-            }
-        }
-        super.sendEvent(event)
-        // Reported after normal handling, so rows can't shift under the cursor mid-click.
-        if event.type == .leftMouseDown || event.type == .rightMouseDown {
-            onMouseDown?()
-        }
-    }
-}
-
+/// The floating window: one row per running timer, plus the entry field and Start button.
 @MainActor
 final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     let panel: ClickReportingPanel
@@ -54,6 +31,18 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
                                     backing: .buffered, defer: false)
         super.init()
 
+        configurePanel()
+        configureIdleRow()
+        panel.contentView = makeContent()
+        refresh()
+        updateStartButton()
+        restoreFrame()
+        panel.delegate = self
+    }
+
+    // MARK: Setup
+
+    private func configurePanel() {
         panel.title = "Alarm Timer"
         // Any click in the window silences (and clears) the timers that are ringing.
         panel.onMouseDown = { [weak self] in
@@ -65,32 +54,22 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentMinSize = NSSize(width: 220, height: 120)
+    }
 
+    private func configureIdleRow() {
         idleRow.caption.stringValue = "Enter a Duration or Time"
         idleRow.countdown.text = formatCountdown(0)
         idleRow.countdown.color = .tertiaryLabelColor
+    }
 
+    private func makeContent() -> NSView {
         rowsStack.orientation = .vertical
         rowsStack.alignment = .centerX
         rowsStack.distribution = .fillEqually
         rowsStack.spacing = rowSpacing
         rowsStack.setHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
 
-        startButton.target = self
-        startButton.action = #selector(submit)
-        startButton.bezelStyle = .rounded
-
-        field.placeholderString = "5m Tea, 1h30m, 90s, 9:30am Call…"
-        field.delegate = self
-        field.target = self
-        field.action = #selector(submit)
-
-        let bottomBar = NSStackView(views: [field, startButton])
-        bottomBar.orientation = .horizontal
-        bottomBar.distribution = .fill
-        bottomBar.spacing = 8
-        bottomBar.setHuggingPriority(.defaultHigh, for: .vertical)
-
+        let bottomBar = makeBottomBar()
         let stack = NSStackView(views: [rowsStack, bottomBar])
         stack.orientation = .vertical
         stack.alignment = .centerX
@@ -110,11 +89,28 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
         ])
-        panel.contentView = content
-        refresh()
-        restoreFrame()
-        panel.delegate = self
+        return content
     }
+
+    private func makeBottomBar() -> NSStackView {
+        startButton.target = self
+        startButton.action = #selector(submit)
+        startButton.bezelStyle = .rounded
+
+        field.placeholderString = "5m Tea, 1h30m, 90s, 9:30am Call…"
+        field.delegate = self
+        field.target = self
+        field.action = #selector(submit)
+
+        let bar = NSStackView(views: [field, startButton])
+        bar.orientation = .horizontal
+        bar.distribution = .fill
+        bar.spacing = 8
+        bar.setHuggingPriority(.defaultHigh, for: .vertical)
+        return bar
+    }
+
+    // MARK: Showing
 
     func show() {
         // The window's spot may have gone away since it was last shown (e.g. a display was unplugged).
@@ -128,6 +124,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         if panel.isVisible { panel.close() } else { show() }
     }
 
+    /// Updates every row; called on each tick and whenever the timers change.
     func refresh() {
         let ids = model.timers.map(\.id)
         if ids != rowIDs || rowsStack.arrangedSubviews.isEmpty { rebuildRows(for: ids) }
@@ -135,18 +132,19 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         let flashOn = Int(Date().timeIntervalSinceReferenceDate * 2) % 2 == 0
         for item in model.timers {
             guard let row = rows[item.id] else { continue }
-            let end = timeFormatter.string(from: item.entry.end)
+            row.caption.stringValue = caption(for: item)
             row.labelText = item.entry.label
             row.countdown.text = formatCountdown(item.remaining)
-            if item.isRinging {
-                row.countdown.color = flashOn ? .systemRed : .labelColor
-                row.caption.stringValue = item.entry.kind == .timer ? "Time's up!" : "Alarm · \(end)"
-            } else {
-                row.countdown.color = .labelColor
-                row.caption.stringValue = item.entry.kind == .timer ? "Timer · ends \(end)" : "Alarm · \(end)"
-            }
+            row.countdown.color = item.isRinging && flashOn ? .systemRed : .labelColor
         }
-        startButton.isEnabled = EntryParser.parse(field.stringValue) != nil
+    }
+
+    private func caption(for item: TimerModel.Item) -> String {
+        let end = timeFormatter.string(from: item.entry.end)
+        switch item.entry.kind {
+        case .alarm: return "Alarm · \(end)"
+        case .timer: return item.isRinging ? "Time's up!" : "Timer · ends \(end)"
+        }
     }
 
     // MARK: Rows
@@ -154,8 +152,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
     /// Swaps in one row per timer and grows or shrinks the window downward so each row keeps its height.
     private func rebuildRows(for ids: [UUID]) {
         let shown = rowsStack.arrangedSubviews
-        panel.contentView?.layoutSubtreeIfNeeded()
-        let rowHeight = shown.first?.frame.height ?? 0
+        let step = rowStep()
         let newCount = max(1, ids.count)
         let oldCount = shown.isEmpty ? newCount : shown.count
 
@@ -175,7 +172,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         guard newCount != oldCount else { return }
         var frame = panel.frame
         let top = frame.maxY
-        frame.size.height += CGFloat(newCount - oldCount) * (rowHeight + rowSpacing)
+        frame.size.height += CGFloat(newCount - oldCount) * step
         if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
             frame.size.height = min(frame.size.height, visible.height)
             frame.origin.y = max(top - frame.size.height, visible.minY)
@@ -183,6 +180,12 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
             frame.origin.y = top - frame.size.height
         }
         place(frame)
+    }
+
+    /// Height one more row adds to the window: the row itself plus the spacing above it.
+    private func rowStep() -> CGFloat {
+        panel.contentView?.layoutSubtreeIfNeeded()
+        return (rowsStack.arrangedSubviews.first?.frame.height ?? 0) + rowSpacing
     }
 
     private func makeRow(for id: UUID) -> TimerRowView {
@@ -240,10 +243,8 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
     /// Saves the frame as it would be with a single row, since that's what the window launches with.
     private func saveFrame() {
         guard !isPlacing else { return }
-        panel.contentView?.layoutSubtreeIfNeeded()
         var frame = panel.frame
-        let rowHeight = rowsStack.arrangedSubviews.first?.frame.height ?? 0
-        let extra = CGFloat(rowsStack.arrangedSubviews.count - 1) * (rowHeight + rowSpacing)
+        let extra = CGFloat(rowsStack.arrangedSubviews.count - 1) * rowStep()
         if extra > 0 {
             frame.origin.y += extra
             frame.size.height -= extra
@@ -257,19 +258,23 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
     // MARK: Entry
 
     @objc private func submit() {
-        let text = field.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return }
-        guard let entry = EntryParser.parse(text) else {
+        guard !field.stringValue.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        guard let entry = EntryParser.parse(field.stringValue) else {
             field.textColor = .systemRed
             NSSound.beep()
             return
         }
         field.stringValue = ""
+        updateStartButton()
         if !model.add(entry) { NSSound.beep() }  // already running
     }
 
     func controlTextDidChange(_ obj: Notification) {
         field.textColor = .labelColor
-        refresh()
+        updateStartButton()
+    }
+
+    private func updateStartButton() {
+        startButton.isEnabled = EntryParser.parse(field.stringValue) != nil
     }
 }

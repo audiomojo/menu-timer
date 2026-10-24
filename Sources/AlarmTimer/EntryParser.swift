@@ -1,6 +1,6 @@
 import Foundation
 
-struct Entry: Equatable {
+struct Entry {
     enum Kind { case timer, alarm }
     let kind: Kind
     let end: Date

@@ -58,7 +58,7 @@ final class SoundMenuController: NSObject, NSMenuDelegate {
         for sound in AlarmSound.allCases {
             let item = menu.addItem(withTitle: sound.title, action: #selector(choose(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = sound.rawValue
+            item.representedObject = sound
         }
         let item = NSMenuItem(title: "Sound", action: nil, keyEquivalent: "")
         item.submenu = menu
@@ -68,12 +68,12 @@ final class SoundMenuController: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         let current = AlarmSound.current()
         for item in menu.items {
-            item.state = item.representedObject as? String == current.rawValue ? .on : .off
+            item.state = item.representedObject as? AlarmSound == current ? .on : .off
         }
     }
 
     @objc private func choose(_ item: NSMenuItem) {
-        guard let raw = item.representedObject as? String, let sound = AlarmSound(rawValue: raw) else { return }
+        guard let sound = item.representedObject as? AlarmSound else { return }
         sound.save()
         sound.play()
     }
