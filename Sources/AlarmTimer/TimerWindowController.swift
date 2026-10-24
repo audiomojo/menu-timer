@@ -69,7 +69,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         startButton.action = #selector(submit)
         startButton.bezelStyle = .rounded
 
-        field.placeholderString = "5m, 1h30m, 90s, 9:30am, 2:30pm…"
+        field.placeholderString = "5m Tea, 1h30m, 90s, 9:30am Call…"
         field.delegate = self
         field.target = self
         field.action = #selector(submit)
@@ -125,6 +125,7 @@ final class TimerWindowController: NSObject, NSTextFieldDelegate, NSWindowDelega
         for item in model.timers {
             guard let row = rows[item.id] else { continue }
             let end = timeFormatter.string(from: item.entry.end)
+            row.label.stringValue = item.entry.label
             row.countdown.text = formatCountdown(item.remaining)
             if item.isRinging {
                 row.countdown.color = flashOn ? .systemRed : .labelColor

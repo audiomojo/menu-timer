@@ -4,12 +4,27 @@ struct Entry: Equatable {
     enum Kind { case timer, alarm }
     let kind: Kind
     let end: Date
+    /// Text typed after the time, e.g. "Flip Pancakes" in "5m Flip Pancakes".
+    var label = ""
 }
 
 enum EntryParser {
     /// Parses "5m", "1h30m", "90s", "20" (minutes) as timers and
     /// "9:30am", "2pm", "14:30", "9:30" (next occurrence) as alarms.
+    /// Anything after the time, separated by a space, becomes the label.
     static func parse(_ raw: String, now: Date = Date(), calendar: Calendar = .current) -> Entry? {
+        let words = raw.split(whereSeparator: \.isWhitespace)
+        // Longest leading run of words that reads as a time wins, so "1h 30m Tea" keeps "30m" in the time.
+        for count in stride(from: words.count, through: 1, by: -1) {
+            if var entry = parseTime(words[..<count].joined(separator: " "), now: now, calendar: calendar) {
+                entry.label = words[count...].joined(separator: " ")
+                return entry
+            }
+        }
+        return nil
+    }
+
+    private static func parseTime(_ raw: String, now: Date, calendar: Calendar) -> Entry? {
         let text = raw.lowercased().filter { !$0.isWhitespace }
         guard !text.isEmpty else { return nil }
 

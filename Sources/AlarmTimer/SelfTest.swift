@@ -48,6 +48,24 @@ func runSelfTest() -> Bool {
         check(bad, nil)
     }
 
+    // Text after the time becomes the label.
+    func checkLabel(_ input: String, _ label: String, secondsFromNow: TimeInterval) {
+        let entry = EntryParser.parse(input, now: now, calendar: calendar)
+        if entry?.label != label || entry?.end.timeIntervalSince(now) != secondsFromNow {
+            failures += 1
+            print("FAIL label \"\(input)\": expected \"\(label)\" +\(secondsFromNow)s, got \(entry.map { "\"\($0.label)\" +\($0.end.timeIntervalSince(now))s" } ?? "nil")")
+        }
+    }
+    checkLabel("5m Flip Pancakes", "Flip Pancakes", secondsFromNow: 300)
+    checkLabel("5m", "", secondsFromNow: 300)
+    checkLabel("  5m   Flip   Pancakes  ", "Flip Pancakes", secondsFromNow: 300)
+    checkLabel("1h 30m Tea", "Tea", secondsFromNow: 5400)
+    checkLabel("10 min Eggs", "Eggs", secondsFromNow: 600)
+    checkLabel("20 Laundry", "Laundry", secondsFromNow: 1200)
+    checkLabel("11:45 AM Call Mom", "Call Mom", secondsFromNow: 105 * 60)
+    checkLabel("2pm Meeting at 3", "Meeting at 3", secondsFromNow: 240 * 60)
+    for bad in ["Flip Pancakes", "Tea 5m", "5x Tea"] { check(bad, nil) }
+
     let formats: [(TimeInterval, String)] = [(0, "0:00"), (0.2, "0:01"), (59, "0:59"), (300, "5:00"), (3599.5, "1:00:00"), (5410, "1:30:10")]
     for (interval, expected) in formats where formatCountdown(interval) != expected {
         failures += 1

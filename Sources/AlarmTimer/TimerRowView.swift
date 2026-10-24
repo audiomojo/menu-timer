@@ -1,8 +1,10 @@
 import AppKit
 
-/// One stacked sub-panel: a caption, an optional stop (circled x) button, and a countdown.
+/// One stacked sub-panel: a caption, a label line, an optional stop (circled x) button, and a countdown.
 final class TimerRowView: NSView {
     let caption = NSTextField(labelWithString: "")
+    /// The user's text for the timer; blank when there isn't one.
+    let label = NSTextField(labelWithString: "")
     let countdown = CountdownView()
     var onStop: (() -> Void)?
 
@@ -25,7 +27,14 @@ final class TimerRowView: NSView {
         caption.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         caption.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        for view in [background, countdown, caption] {
+        label.textColor = .labelColor
+        label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+        label.lineBreakMode = .byTruncatingTail
+        label.alignment = .center
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        for view in [background, countdown, caption, label] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -41,12 +50,16 @@ final class TimerRowView: NSView {
             caption.leadingAnchor.constraint(equalTo: leadingAnchor, constant: sideInset),
             caption.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -sideInset),
 
-            countdown.topAnchor.constraint(equalTo: caption.bottomAnchor, constant: 2),
+            label.topAnchor.constraint(equalTo: caption.bottomAnchor, constant: 1),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: sideInset),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -sideInset),
+
+            countdown.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 2),
             countdown.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
             countdown.leadingAnchor.constraint(equalTo: leadingAnchor),
             countdown.trailingAnchor.constraint(equalTo: trailingAnchor),
 
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 74),
         ])
 
         if showsStop {
